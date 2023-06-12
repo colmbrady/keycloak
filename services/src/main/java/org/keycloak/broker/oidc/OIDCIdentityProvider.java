@@ -513,15 +513,24 @@ public class OIDCIdentityProvider extends AbstractOAuth2IdentityProvider<OIDCIde
         }
 
         identity.setUsername(preferredUsername);
-        if (tokenResponse != null && tokenResponse.getSessionState() != null) {
-            identity.setBrokerSessionId(getConfig().getAlias() + "." + tokenResponse.getSessionState());
-        }
+        this.trySetBrokerSessionId(tokenResponse, idToken, identity);
         if (tokenResponse != null) identity.getContextData().put(FEDERATED_ACCESS_TOKEN_RESPONSE, tokenResponse);
         if (tokenResponse != null) processAccessTokenResponse(identity, tokenResponse);
         
         return identity;
     }
 
+    private void trySetBrokerSessionId(final AccessTokenResponse tokenResponse, final JsonWebToken idToken, final BrokeredIdentityContext identity) {
+        // We firstly assume that the session state from the external IDP is a reliable session key, and
+        // fallback to the optional SID claim in the ID Token if that does not exist.
+        if (tokenResponse != null && tokenResponse.getSessionState() != null) {
+            identity.setBrokerSessionId(getConfig().getAlias() + "." + tokenResponse.getSessionState());
+        } else if (idToken != null && idToken.getOtherClaims().get(IDToken.SESSION_ID) != null) {
+            identity.setBrokerSessionId(getConfig().getAlias() + "." + idToken.getOtherClaims().get(IDToken.SESSION_ID));
+        } else {
+            logger.debugf("Unable to set Broker Session ID as its not contained in either the AccessTokenResponse.session_state or the IDToken.sid.");
+        }
+    }
     protected String getusernameClaimNameForIdToken() {
         return IDToken.PREFERRED_USERNAME;
     }
